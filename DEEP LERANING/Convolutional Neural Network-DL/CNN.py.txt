@@ -1,0 +1,406 @@
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+from math import sqrt
+
+import sklearn.utils
+from sklearn.preprocessing import RobustScaler #Scaling the features
+from sklearn.model_selection import StratifiedShuffleSplit #Splitting the dataset
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, make_scorer, precision_score, recall_score, f1_score, roc_auc_score, roc_curve, precision_recall_curve, average_precision_score, auc
+from sklearn.model_selection import GridSearchCV #hyperparameter tuning
+from sklearn.decomposition import PCA
+
+#Visual Analysis
+%matplotlib inline
+import matplotlib.pyplot as plt
+from matplotlib import rcParams
+import seaborn as sns
+import IPython
+
+from imblearn.over_sampling import ADASYN #Adaptive Synthetic Oversampling
+from collections import Counter
+from scipy import stats
+
+#Neural Networks implementation
+import keras
+import tensorflow as tf
+from keras import backend as K
+from keras.models import Sequential
+from keras.layers import Dense, Dropout
+#importing
+from keras.optimizers import adam_v2
+# to use it
+adam_v2.Adam(...)
+from tensorflow.keras.optimizers import Adam
+#from keras.optimizers import Adam
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.constraints import maxnorm
+from keras.utils.vis_utils import plot_model
+
+import warnings
+warnings.filterwarnings('ignore')
+
+
+#Loading data in a dataframe 'creditcard_data' and using head() to display the first 5 instances.
+creditcard_data= pd.read_csv('creditcard.csv')
+creditcard_data.head()
+
+#Use parameter 'n' to display instances other than 5.
+creditcard_data.head(n=20)
+
+#Number of instances and attributes,i.e., Dimensionality of the dataset
+creditcard_data.shape
+
+creditcard_data.info()
+
+#Sum of missing cells for each attribute
+creditcard_data.isnull().sum().any()
+
+#Number of distinct categories or classes i.e., Fraudulent and Genuine
+creditcard_data['Class'].nunique()
+
+#number of instances per class
+creditcard_data.Class.value_counts()
+
+#visual representation of instances per class
+creditcard_data.Class.value_counts().plot.bar()
+
+#Before sampling (PCA is performed for visualization only)
+pca= PCA(n_components=2)
+creditcard_2d= pd.DataFrame(pca.fit_transform(creditcard_data.iloc[:,0:30]))
+creditcard_2d= pd.concat([creditcard_2d, creditcard_data['Class']], axis=1)
+creditcard_2d.columns= ['x', 'y', 'Class']
+sns.lmplot(x='x', y='y', data=creditcard_2d, fit_reg=False, hue='Class')
+
+#Descriptive Statistics
+creditcard_data.describe()
+
+#checking the percentage of each class in the dataset
+(creditcard_data.Class.value_counts())/(creditcard_data.Class.count())
+
+
+#Histrogram for feature Time
+f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(12,4))
+
+ax1.hist(creditcard_data["Time"][creditcard_data["Class"] == 1], bins = 50)
+ax1.set_title('Fraudulent')
+
+ax2.hist(creditcard_data["Time"][creditcard_data["Class"] == 0], bins = 50)
+ax2.set_title('Genuine')
+
+plt.xlabel('Seconds after transaction number zero')
+plt.ylabel('Number of Transactions')
+plt.show()
+
+#dropping Time because it does not give any valuable information
+creditcard_data = creditcard_data.drop("Time", axis = 1)
+creditcard_data.shape
+
+
+#Descriptive statistics for Fraudulent Transactions
+print("Fraudulent Transactions")
+creditcard_data['Amount'][creditcard_data['Class']==1]. describe()
+
+#Descriptive statistics for Genuine Transactions
+print("Genuine Transactions")
+creditcard_data['Amount'][creditcard_data['Class']==0]. describe()
+
+#Variance
+creditcard_data.var()
+
+#Boxplot for the Amount feature, in order to visualiza the outliers.
+sns.boxplot(x=creditcard_data['Class'], y=creditcard_data['Amount'])
+
+#Standardizing the Amount column (All other 'V' columns are already scaled as they've undergone PCA transformation).
+Rob_scaler=RobustScaler() #Robust to outliers
+creditcard_data['Std_Amount'] = Rob_scaler.fit_transform(creditcard_data['Amount'].values.reshape(-1, 1))
+creditcard_data.head()
+
+
+#drop Amount and move Std_Amount at index '0'
+creditcard_data = creditcard_data.drop('Amount',axis=1)
+
+Std_Amount = creditcard_data['Std_Amount']
+creditcard_data.drop('Std_Amount', axis=1, inplace=True)
+creditcard_data.insert(0, 'Std_Amount', Std_Amount)
+creditcard_data.head()
+
+#Splitting data before sampling
+#Splitting data into train and test set in 80% and 20% respectively, using Stratified Shuffle Split
+
+X = creditcard_data.drop('Class', axis=1)
+Y = creditcard_data['Class']
+
+sss1 = StratifiedShuffleSplit(n_splits=5, test_size=0.2, random_state=42)
+
+for train_index1, test_index in sss1.split(X, Y):
+    print("Train:", train_index1, "Test:", test_index)
+    Xtrain, Xtest = X.iloc[train_index1], X.iloc[test_index]
+    Ytrain, Ytest = Y.iloc[train_index1], Y.iloc[test_index]
+
+#Splitting the train set further into train and validation set, which leaves train set 60% of the originial dataset and, test and validation sets 20% each respectively.
+sss2 = StratifiedShuffleSplit(n_splits=5, test_size=0.25, random_state=42)
+
+for train_index2, val_index in sss2.split(Xtrain, Ytrain):
+    print("Train:", train_index2, "Validation:", val_index)
+    Xtrain_final, Xval = X.iloc[train_index2], X.iloc[val_index]
+    Ytrain_final, Yval = Y.iloc[train_index2], Y.iloc[val_index]
+
+
+# Check if the labels are distributed equally in all the datasets after splitting
+train_unique_label, train_counts_label = np.unique(Ytrain_final, return_counts=True)
+test_unique_label, test_counts_label = np.unique(Ytest, return_counts=True)
+val_unique_label, val_counts_label = np.unique(Yval, return_counts=True)
+
+print('Label Distributions: \n')
+print(train_counts_label/ len(Ytrain_final))
+print(test_counts_label/ len(Ytest))
+print(val_counts_label/ len(Yval))
+
+
+#Dimensionality of the datasets retrieved after splitting
+print(Xtrain_final.shape)
+print(Ytrain_final.shape)
+print(Xtest.shape)
+print(Ytest.shape)
+print(Xval.shape)
+print(Yval.shape)
+
+
+#checking correlation between features and the likelihood of the transaction to be fraud on the unbalanced dataset
+f, ax1 = plt.subplots(figsize=(24,10))
+
+corr = creditcard_data.corr()
+sns.heatmap(corr, cmap='coolwarm_r', annot_kws={'size':20}, ax=ax1)
+ax1.set_title("Imbalanced Correlation Matrix", fontsize=14)
+
+
+#Checking number of instances for each class in the train dataset
+print(Ytrain_final.value_counts())
+
+
+#Using ADASYN for Oversampling
+from imblearn.over_sampling import SMOTE
+ada = ADASYN(sampling_strategy='minority', random_state=42)
+oversample = SMOTE()
+#Oversampling is applied only on the training set
+X, Y= oversample.fit_resample(X, Y)
+print('Resampled dataset shape %s' % Counter(Y))
+print('Shape of X_adasampled: {}'.format(X.shape))
+print('Shape of Y_adasampled: {}'.format(Y.shape))
+
+
+#check the disribution of both the labels
+train_label, train_count = np.unique(Y, return_counts=True)
+print('Label Distribution\n')
+
+
+print(type(X))
+print(type(Y))
+
+
+Xsm_train_df = pd.DataFrame(X)
+Xsm_train_df.columns = Xtrain.columns
+Ysm_train_df = pd.DataFrame(Y)
+Ysm_train_df = Ysm_train_df.rename(columns={0: 'Class'})
+print(Xsm_train_df.head())
+print(Ysm_train_df.head())
+
+
+#Merging the Xsm_train_df and Ysm_train_df based on the index values to get a single dataframe in order to visualize a correlation matrix
+new_df= pd.merge(Xsm_train_df, Ysm_train_df, how='inner', left_index=True, right_index=True)
+new_df.head()
+
+
+#checking correlation between features on the balanced dataset
+f, ax1 = plt.subplots(figsize=(24,10))
+
+corr = new_df.corr()
+sns.heatmap(corr, cmap='coolwarm_r', annot_kws={'size':20}, ax=ax1)
+ax1.set_title("Balanced Correlation Matrix", fontsize=14)
+
+
+#visualizing balanced train dataset
+X_df= pd.DataFrame(X)
+Y_df= pd.DataFrame(Y)
+Y_df=Y_df.rename(columns={0: 'Class'})
+train_2d= pd.DataFrame(pca.fit_transform(X_df.iloc[:,0:29]))
+train_2d= pd.concat([train_2d, Y_df], axis=1)
+train_2d.columns= ['x', 'y', 'Class']
+sns.lmplot(x='x', y='y', data=train_2d, fit_reg=False, hue='Class')
+
+
+#An undersampled dataset is created to tune the parameters using Grid-Search
+Ytrain_df = pd.DataFrame(Ytrain_final)
+Ytrain_df = Ytrain_df.rename(columns={0: 'Class'})
+Train_set= pd.merge(Xtrain_final, Ytrain_df, how='inner', left_index=True, right_index=True)
+Train_set.head()
+
+
+Train_set.shape
+
+#Length of Frauds
+length_frauds=len(Train_set[Train_set.Class==1])
+length_frauds
+
+
+#Taking only Frauds in a dataframe
+fraud_df= Train_set.loc[Train_set['Class'] == 1]
+fraud_df.head()
+
+
+#Taking only Non-frauds
+non_fraud_df= Train_set.loc[Train_set['Class'] == 0]
+#Randomly select the same number of records as the Frauds
+non_frauds=non_fraud_df.sample(n=length_frauds)
+non_frauds.shape
+
+
+#Appending both Frauds and Non-Frauds
+undersampled_df= fraud_df.append(non_frauds)
+#Randomly shuffling all the instances
+undersampled_df = sklearn.utils.shuffle(undersampled_df)
+undersampled_df.head()
+
+
+#Separating labels from the other features
+X_undersample = undersampled_df.drop('Class', axis=1)
+Y_undersample = undersampled_df['Class']
+print(X_undersample.shape)
+print(Y_undersample.shape)
+X_undersample.head()
+
+
+#Converting undersampled train sets in numpy arrays
+X_us_arr= X_undersample.values
+Y_us_arr= Y_undersample.values
+#Converting test and validation dataframes in numpy arrays
+Xval_arr=Xval.values
+Yval_arr=Yval.values
+Xtest_arr=Xtest.values
+Ytest_arr=Ytest.values
+
+
+#Plotting number of repeats against the average score from those repeats.
+#Expected: As the number of repeats increase, the average score stabilizes
+f_score_list=[0.7627118644067796, 0.749003984063745, 0.7419354838709676, 0.7457627118644068, 0.7018867924528301, 0.7294117647058823, 0.6643109540636042, 0.753968253968254, 0.7018867924528301, 0.6888888888888889, 0.6478873239436619, 0.7430830039525692, 0.7410358565737051, 0.7479674796747967, 0.7175572519083968, 0.7634854771784232, 0.7265625, 0.6690647482014389, 0.7159533073929961, 0.7258064516129031, 0.7540983606557377, 0.7315175097276265, 0.7045454545454546, 0.7580645161290323, 0.7076923076923076, 0.6816479400749064, 0.7407407407407407, 0.7041198501872659, 0.7209302325581397, 0.7171314741035857, 0.6789667896678966, 0.7272727272727273, 0.732283464566929, 0.7583333333333334, 0.73015873015873, 0.7230769230769232, 0.7531380753138075, 0.7459016393442623, 0.6893939393939396, 0.7622950819672131, 0.7295081967213115, 0.7450980392156862, 0.7782426778242677, 0.6992481203007519, 0.748971193415638, 0.7126436781609196, 0.7364341085271319, 0.6842105263157894, 0.7317073170731707, 0.7848101265822784, 0.7104247104247104, 0.6666666666666666, 0.7591836734693878, 0.7401574803149606, 0.6946564885496183, 0.7272727272727273, 0.7175572519083968, 0.6946564885496183, 0.6940298507462687, 0.7109375, 0.6966292134831462, 0.7510204081632654, 0.7603305785123966, 0.6713780918727914, 0.7460317460317459, 0.7398373983739839, 0.7449392712550608, 0.673913043478261, 0.6881720430107526, 0.7551867219917012, 0.7215686274509804, 0.6789667896678966, 0.6966292134831462, 0.7551867219917012, 0.7666666666666667, 0.7215686274509804, 0.732283464566929, 0.732283464566929, 0.7181467181467182, 0.7250996015936256, 0.6791044776119403, 0.7109375, 0.7203065134099617, 0.7410358565737051, 0.7603305785123966, 0.681159420289855, 0.7551867219917012, 0.7368421052631579, 0.7142857142857143, 0.6416382252559727, 0.7294117647058823, 0.7531380753138075, 0.7698744769874477, 0.7131782945736435, 0.775, 0.5987261146496816, 0.7099236641221374, 0.7265625, 0.7372549019607844, 0.7280000000000001]
+f_df=pd.DataFrame(f_score_list)
+fscores= f_df.values
+final_mean= np.mean(fscores[0:101])
+means = list()
+for i in range(1,len(f_score_list)+1):
+    data = fscores[0:i, 0]
+    mean_fscore = np.mean(data)
+    means.append(mean_fscore)
+# line plot of the values generated in the list
+plt.plot(means)
+plt.plot([final_mean for x in range(len(means))])
+plt.show() #From this plot the point of diminishing returns can be located.
+
+
+#function for confusion matrix
+def conf_matrix(predicted_values):
+    Predictions_CM = confusion_matrix(Ytest_arr, predicted_values, labels = [0, 1])
+    class_feat=creditcard_data['Class'].copy()
+    class_feat= class_feat.unique()
+    fig, ax = plt.subplots(figsize=(5,5))
+    sns.heatmap(Predictions_CM, annot=True, fmt='d', xticklabels=class_feat, yticklabels=class_feat)
+    plt.ylabel('Actual Class')
+    plt.xlabel('Predicted Class')
+    plt.show()
+
+
+
+#Training a Multi-layer perceptron with 1 hidden layer on Oversampled dataset without using dropout and, using the parameters tuned above.
+n_inputs = X.shape[1]
+es= keras.callbacks.EarlyStopping(monitor='val_loss',
+                              min_delta=0,
+                              patience=2,
+                              verbose=0, mode='min', restore_best_weights= True)
+#Model Creation
+Model1 = Sequential()
+Model1.add(Dense(65, input_shape=(n_inputs, ), kernel_initializer='he_normal', activation='relu'))
+Model1.add(Dense(1, kernel_initializer='he_normal', activation='sigmoid'))
+
+#Compile Model
+Model1.compile(Adam(lr=0.01), loss='binary_crossentropy', metrics=['accuracy'])
+Model1.summary()
+
+#Fit Model
+history1= Model1.fit(X, Y, validation_data=(Xval_arr, Yval_arr), batch_size=700, epochs=30, callbacks=[es], shuffle=True, verbose=2)
+print(history1.history.keys())
+
+
+
+# summarize history for accuracy
+plt.plot(history1.history['accuracy'])
+plt.plot(history1.history['val_accuracy'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+
+# summarize history for loss
+plt.plot(history1.history['loss'])
+plt.plot(history1.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+
+
+#Training a Multi-layer perceptron with 1 hidden layer on Oversampled dataset using the parameters tuned above and adding a Dropout.
+n_inputs = X.shape[1]
+es= keras.callbacks.EarlyStopping(monitor='val_loss',
+                              min_delta=0,
+                              patience=2,
+                              verbose=0, mode='min', restore_best_weights= True)
+Model1_drop = Sequential()
+Model1_drop.add(Dense(65, input_shape=(n_inputs, ), kernel_initializer='he_normal', activation='relu'))
+Model1_drop.add(Dropout(0.5))
+Model1_drop.add(Dense(1, kernel_initializer='he_normal', activation='sigmoid'))
+
+Model1_drop.compile(Adam(lr=0.001), loss='binary_crossentropy', metrics=['accuracy'])
+Model1_drop.summary()
+
+history2= Model1_drop.fit(X, Y, validation_data=(Xval_arr, Yval_arr), batch_size=700, epochs=40, callbacks=[es], shuffle=True, verbose=2)
+print(history2.history.keys())
+
+
+
+# summarize history for accuracy
+plt.plot(history2.history['accuracy'])
+plt.plot(history2.history['val_accuracy'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+# summarize history for loss
+plt.plot(history2.history['loss'])
+plt.plot(history2.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+
+from tensorflow.keras.models import Model
+#Y_pred_cls=Model1.predict(Xtest_arr)
+Y_pred_cls = Model1_drop.predict(Xtest_arr, batch_size=200, verbose=0)
+print('Accuracy Model1 (Dropout): '+ str(Model1_drop.evaluate(Xtest_arr,Ytest_arr.round())[1]))
+print('Recall_score: ' + str(recall_score(Ytest_arr,Y_pred_cls.round())))
+print('Precision_score: ' + str(precision_score(Ytest_arr, Y_pred_cls.round())))
+print('F1-score: ' + str(f1_score(Ytest_arr,Y_pred_cls.round())))
+conf_matrix(Y_pred_cls.round())
+
+
+
+
+
+
