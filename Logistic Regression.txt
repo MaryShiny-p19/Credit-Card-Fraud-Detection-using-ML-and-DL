@@ -1,0 +1,208 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split                      #alows us to split the data into train and test
+from sklearn.metrics import accuracy_score                                #to check the performance of the model
+import matplotlib.pyplot as plt                                                 #to plot the fraud and non fraud transactions
+from sklearn.preprocessing import StandardScaler            #for preprocessing
+
+
+from google.colab import drive
+drive.mount('/content/drive',  force_remount=True)
+
+
+credit_card_data = pd.read_csv('creditcard.csv')
+
+credit_card_data.head()                  #initial table values
+credit_card_data.info()                 #information
+credit_card_data.isnull().sum()  #checking null values
+
+
+fraud = credit_card_data[credit_card_data.Class == 1]
+print(legit.shape)
+print(fraud.shape)
+
+
+legit = len(credit_card_data[credit_card_data.Class == 0])
+fraud = len(credit_card_data[credit_card_data.Class == 1])
+fraud_percentage = (fraud/(fraud + legit))* 100
+
+print("Number of non fraud transactions:", legit)
+print("Number of fraud transactions:", fraud)
+print("Percentage of fraud transactions:{:.4f}".format(fraud_percentage))
+
+
+
+#ploting the values
+
+labels = ["legit","fraud"]
+count_classes = credit_card_data.value_counts(credit_card_data['Class'], sort = True)
+count_classes.plot(kind = "bar", rot = 0)
+plt.title("Visuavalization of labels")
+plt.ylabel("count")
+plt.xticks(range(2), labels)
+plt.show()
+
+
+
+#Splitting data into train and test
+
+
+#storing variables to x and y
+x = credit_card_data.drop(['Class'], axis=1)
+y = credit_card_data['Class']
+
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8, test_size=0.2, random_state=2)
+
+
+scaler = StandardScaler()
+
+x_train['Amount'] = scaler.fit_transform(x_train[['Amount']])
+x_train.head()
+
+
+# Transform the test set
+x_test['Amount'] = scaler.transform(x_test[['Amount']])
+x_test.head()
+
+
+
+#Handling Imbalenced data by undersampling
+
+from imblearn.under_sampling import RandomUnderSampler
+from collections import Counter
+
+
+rus = RandomUnderSampler()
+
+x_train_rus, y_train_rus = rus.fit_resample(x_train, y_train)
+x_test_rus, y_test_rus = rus.fit_resample(x_test, y_test)
+
+
+# Befor sampling class distribution
+print('Before sampling class distribution:-',Counter(y_train))
+# new class distribution 
+print('New class distribution:-',Counter(y_train_rus))
+
+
+
+#Model Building
+from sklearn.linear_model import LogisticRegression
+
+lr_model = LogisticRegression(max_iter=1000)
+
+#prediction on training and testing data
+pred_train_lr = lr_model.predict(x_train_rus)
+pred_test_lr = lr_model.predict(x_test_rus)
+
+
+#prediction using confusion matrix
+from sklearn.metrics import accuracy_score, precision_score, confusion_matrix, recall_score, f1_score, classification_report
+
+tn, fp, fn, tp = confusion_matrix(y_test_rus, pred_test_lr).ravel()
+conf_matrix = pd.DataFrame(
+    {
+        'Predicted Fraud': [tp, fp],
+        'Predicted Not Fraud': [fn, tn]
+    }, index = ['Fraud', 'Not Fraud']
+)
+conf_matrix
+
+#Drawing a heatmap for the above confusion matrix
+
+import seaborn as sn
+sn.heatmap(conf_matrix, annot=True)
+
+
+
+lr_accuracy_test = accuracy_score(y_test_rus, pred_test_lr)
+print("accuracy score of test set:",lr_accuracy_test)
+lr_accuracy_train = accuracy_score(y_train_rus, pred_train_lr)
+print("accuracy score of train set:",lr_accuracy_train)
+
+
+
+lr_precision_test = precision_score(y_test_rus, pred_test_lr)
+print("precision score of test set:",lr_precision_test)
+lr_precision_train = precision_score(y_train_rus, pred_train_lr)
+print("precision score of train set:",lr_precision_train)
+
+
+
+lr_recall_test = recall_score(y_test_rus, pred_test_lr)
+print("recall score of test set:",lr_recall_test)
+lr_recall_train = recall_score(y_train_rus, pred_train_lr)
+print("recall score of train set:",lr_recall_train)
+
+
+
+
+lr_f1_test = f1_score(y_test_rus, pred_test_lr)
+print("f1 score of test set:",lr_f1_test)
+lr_f1_train = f1_score(y_train_rus, pred_train_lr)
+print("f1 score of train set:",lr_f1_train)
+
+
+#CLASSIFICATION REPORT OF PRECISION, RECALL, F1SCORE
+
+
+print(classification_report(y_train_rus, pred_train_lr))
+
+
+#ROC Curve
+
+lr_pred_test_prob = lr_model.predict_proba(x_test_rus)[:, 1]
+
+from sklearn.metrics import roc_curve, roc_auc_score
+
+fpr, tpr, threshold = roc_curve(y_test_rus, lr_pred_test_prob)
+
+lr_auc = roc_auc_score(y_test_rus, lr_pred_test_prob)
+lr_auc
+
+def plot_roc_curve(fpr, tpr, label=None):
+    plt.figure(figsize=(8, 6))
+    plt.title('ROC Curve', fontsize=15)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr, tpr, linewidth=2, label=label)
+    plt.xticks(np.arange(0, 1, 0.05), rotation=90)
+    plt.xlabel('False Positive Rates', fontsize=15)
+    plt.ylabel('True Positive Rates', fontsize=15)
+    plt.legend(loc='best')
+    
+    plt.show()
+
+plot_roc_curve(fpr=fpr, tpr=tpr, label="AUC = %.3f" % lr_auc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
