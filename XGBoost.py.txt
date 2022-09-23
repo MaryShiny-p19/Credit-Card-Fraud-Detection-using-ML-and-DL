@@ -1,0 +1,167 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split                      #alows us to split the data into train and test
+from sklearn.metrics import accuracy_score                                #to check the performance of the model
+import matplotlib.pyplot as plt                                                 #to plot the fraud and non fraud transactions
+from sklearn.preprocessing import StandardScaler            #for preprocessing
+
+
+from google.colab import drive
+drive.mount('/content/drive',  force_remount=True)
+
+
+credit_card_data = pd.read_csv('creditcard.csv')
+
+credit_card_data.head()                  #initial table values
+credit_card_data.info()                 #information
+credit_card_data.isnull().sum()  #checking null values
+
+
+fraud = credit_card_data[credit_card_data.Class == 1]
+print(legit.shape)
+print(fraud.shape)
+
+
+legit = len(credit_card_data[credit_card_data.Class == 0])
+fraud = len(credit_card_data[credit_card_data.Class == 1])
+fraud_percentage = (fraud/(fraud + legit))* 100
+
+print("Number of non fraud transactions:", legit)
+print("Number of fraud transactions:", fraud)
+print("Percentage of fraud transactions:{:.4f}".format(fraud_percentage))
+
+
+
+#ploting the values
+
+labels = ["legit","fraud"]
+count_classes = credit_card_data.value_counts(credit_card_data['Class'], sort = True)
+count_classes.plot(kind = "bar", rot = 0)
+plt.title("Visuavalization of labels")
+plt.ylabel("count")
+plt.xticks(range(2), labels)
+plt.show()
+
+
+
+#Splitting data into train and test
+
+
+#storing variables to x and y
+x = credit_card_data.drop(['Class'], axis=1)
+y = credit_card_data['Class']
+
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8, test_size=0.2, random_state=2)
+
+
+scaler = StandardScaler()
+
+x_train['Amount'] = scaler.fit_transform(x_train[['Amount']])
+x_train.head()
+
+
+# Transform the test set
+x_test['Amount'] = scaler.transform(x_test[['Amount']])
+x_test.head()
+
+
+
+#Handling Imbalenced data by undersampling
+
+from imblearn.under_sampling import RandomUnderSampler
+from collections import Counter
+
+
+rus = RandomUnderSampler()
+
+x_train_rus, y_train_rus = rus.fit_resample(x_train, y_train)
+x_test_rus, y_test_rus = rus.fit_resample(x_test, y_test)
+
+
+# Befor sampling class distribution
+print('Before sampling class distribution:-',Counter(y_train))
+# new class distribution 
+print('New class distribution:-',Counter(y_train_rus))
+
+#Model Building
+
+import xgboost as xgb
+
+xg = xgb.XGBClassifier()
+
+xg.fit(x_train_rus, y_train_rus)     #Training the model
+
+def PrintStats(cmat, y_test_rus, pred):
+    tpos = cmat[0][0]
+    fneg = cmat[1][1]
+    fpos = cmat[0][1]
+    tneg = cmat[1][0]
+
+def RunModel(model, X_train_rus, y_train_rus, X_test_rus, y_test_rus):
+    model.fit(X_train_rus, y_train_rus.values.ravel())
+    pred = model.predict(X_test_rus)
+    matrix = confusion_matrix(y_test_rus, pred)
+    return matrix, pred
+
+#Performance measures
+import scikitplot as skplt
+
+cmat, pred = RunModel(xg, x_train_rus, y_train_rus, x_test_rus, y_test_rus)
+
+import scikitplot as skplt
+skplt.metrics.plot_confusion_matrix(y_test_rus, pred)
+
+acc_agb_test = accuracy_score(y_test_rus, pred)
+print("accuracy score of test set of xgboost:", acc_agb_test)
+
+
+print (classification_report(y_test_rus, pred))
+
+
+#ROC
+
+from sklearn import metrics         
+
+# Creating XGBoost model
+clf = xgb.XGBClassifier()
+clf.fit(x_train_rus, y_train_rus)
+y_pred = clf.predict(x_test_rus)
+
+# AUC Curve XGBoost
+y_pred_probability = clf.predict_proba(x_test_rus)[::,1]
+fpr, tpr, _ = metrics.roc_curve(y_test_rus, y_pred_probability)
+auc = metrics.roc_auc_score(y_test_rus, y_pred_probability)
+plt.plot(fpr,tpr,label="XGBoost, auc="+str(auc))
+plt.legend(loc=4)
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
