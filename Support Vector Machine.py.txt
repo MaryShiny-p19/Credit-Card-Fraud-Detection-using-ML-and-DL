@@ -1,0 +1,177 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split                      #alows us to split the data into train and test
+from sklearn.metrics import accuracy_score                                #to check the performance of the model
+import matplotlib.pyplot as plt                                                 #to plot the fraud and non fraud transactions
+from sklearn.preprocessing import StandardScaler            #for preprocessing
+
+
+from google.colab import drive
+drive.mount('/content/drive',  force_remount=True)
+
+
+credit_card_data = pd.read_csv('creditcard.csv')
+
+credit_card_data.head()                  #initial table values
+credit_card_data.info()                 #information
+credit_card_data.isnull().sum()  #checking null values
+
+
+fraud = credit_card_data[credit_card_data.Class == 1]
+print(legit.shape)
+print(fraud.shape)
+
+
+legit = len(credit_card_data[credit_card_data.Class == 0])
+fraud = len(credit_card_data[credit_card_data.Class == 1])
+fraud_percentage = (fraud/(fraud + legit))* 100
+
+print("Number of non fraud transactions:", legit)
+print("Number of fraud transactions:", fraud)
+print("Percentage of fraud transactions:{:.4f}".format(fraud_percentage))
+
+
+
+#ploting the values
+
+labels = ["legit","fraud"]
+count_classes = credit_card_data.value_counts(credit_card_data['Class'], sort = True)
+count_classes.plot(kind = "bar", rot = 0)
+plt.title("Visuavalization of labels")
+plt.ylabel("count")
+plt.xticks(range(2), labels)
+plt.show()
+
+
+
+#Splitting data into train and test
+
+
+#storing variables to x and y
+x = credit_card_data.drop(['Class'], axis=1)
+y = credit_card_data['Class']
+
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8, test_size=0.2, random_state=2)
+
+
+scaler = StandardScaler()
+
+x_train['Amount'] = scaler.fit_transform(x_train[['Amount']])
+x_train.head()
+
+
+# Transform the test set
+x_test['Amount'] = scaler.transform(x_test[['Amount']])
+x_test.head()
+
+
+
+#Handling Imbalenced data by undersampling
+
+from imblearn.under_sampling import RandomUnderSampler
+from collections import Counter
+
+
+rus = RandomUnderSampler()
+
+x_train_rus, y_train_rus = rus.fit_resample(x_train, y_train)
+x_test_rus, y_test_rus = rus.fit_resample(x_test, y_test)
+
+
+# Befor sampling class distribution
+print('Before sampling class distribution:-',Counter(y_train))
+# new class distribution 
+print('New class distribution:-',Counter(y_train_rus))
+
+#Model Building
+
+from sklearn.preprocessing import MinMaxScaler
+
+mms = MinMaxScaler()
+
+from sklearn.svm import SVC
+
+svc_model = SVC(kernel='linear', probability=True)
+
+svc_model.fit(x_train_rus, y_train_rus)
+
+svc_pred = svc_model.predict(x_test_rus)
+
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, confusion_matrix
+
+svm_accuracy = accuracy_score(y_test_rus, svc_pred)
+print("accuracy score of the svm model is: ", svm_accuracy)
+
+svc_recall = recall_score(y_test_rus, svc_pred)
+
+print("Recall score of the svm model is: ", svc_recall)
+
+svc_f1score_test = f1_score(y_test_rus, svc_pred)
+print("f1 score of the svm model is: ", svc_f1score_test)
+
+svc_precision_score = precision_score(y_test_rus, svc_pred)
+print("precision score of the svm model is: ", svc_precision_score)
+
+print(classification_report(y_test_rus, svc_pred))
+
+
+#confusion matrix
+tn, fp, fn, tp = confusion_matrix(y_test_rus, svc_pred).ravel()
+conf_matrix = pd.DataFrame(
+    {
+        'Predicted Fraud': [tp, fp],
+        'Predicted Not Fraud': [fn, tn]
+    }, index = ['Fraud', 'Not Fraud']
+)
+conf_matrix
+
+import seaborn as sn
+sn.heatmap(conf_matrix, annot=True)
+
+
+#ROC Curve
+
+svm_pred_test_prob = svc_model.predict_proba(x_test_rus)[:, 1]
+
+from sklearn.metrics import roc_curve, roc_auc_score
+
+fpr, tpr, threshold = roc_curve(y_test_rus, svm_pred_test_prob)
+
+svm_auc = roc_auc_score(y_test_rus, svm_pred_test_prob )
+svm_auc
+
+def plot_roc_curve(fpr, tpr, label=None):
+    plt.figure(figsize=(8, 6))
+    plt.title('ROC Curve', fontsize=15)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr, tpr, linewidth=2, label=label)
+    plt.xticks(np.arange(0, 1, 0.05), rotation=90)
+    plt.xlabel('False Positive Rates', fontsize=15)
+    plt.ylabel('True Positive Rates', fontsize=15)
+    plt.legend(loc='best')
+    
+    plt.show()
+
+plot_roc_curve(fpr=fpr, tpr=tpr, label="AUC = %.3f" % svm_auc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
