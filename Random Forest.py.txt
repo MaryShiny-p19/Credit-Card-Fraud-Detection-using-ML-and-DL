@@ -1,0 +1,228 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split                      #alows us to split the data into train and test
+from sklearn.metrics import accuracy_score                                #to check the performance of the model
+import matplotlib.pyplot as plt                                                 #to plot the fraud and non fraud transactions
+from sklearn.preprocessing import StandardScaler            #for preprocessing
+
+
+from google.colab import drive
+drive.mount('/content/drive',  force_remount=True)
+
+
+credit_card_data = pd.read_csv('creditcard.csv')
+
+credit_card_data.head()                  #initial table values
+credit_card_data.info()                 #information
+credit_card_data.isnull().sum()  #checking null values
+
+
+fraud = credit_card_data[credit_card_data.Class == 1]
+print(legit.shape)
+print(fraud.shape)
+
+
+legit = len(credit_card_data[credit_card_data.Class == 0])
+fraud = len(credit_card_data[credit_card_data.Class == 1])
+fraud_percentage = (fraud/(fraud + legit))* 100
+
+print("Number of non fraud transactions:", legit)
+print("Number of fraud transactions:", fraud)
+print("Percentage of fraud transactions:{:.4f}".format(fraud_percentage))
+
+
+
+#ploting the values
+
+labels = ["legit","fraud"]
+count_classes = credit_card_data.value_counts(credit_card_data['Class'], sort = True)
+count_classes.plot(kind = "bar", rot = 0)
+plt.title("Visuavalization of labels")
+plt.ylabel("count")
+plt.xticks(range(2), labels)
+plt.show()
+
+
+
+#Splitting data into train and test
+
+
+#storing variables to x and y
+x = credit_card_data.drop(['Class'], axis=1)
+y = credit_card_data['Class']
+
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.8, test_size=0.2, random_state=2)
+
+
+scaler = StandardScaler()
+
+x_train['Amount'] = scaler.fit_transform(x_train[['Amount']])
+x_train.head()
+
+
+# Transform the test set
+x_test['Amount'] = scaler.transform(x_test[['Amount']])
+x_test.head()
+
+
+
+#Handling Imbalenced data by undersampling
+
+from imblearn.under_sampling import RandomUnderSampler
+from collections import Counter
+
+
+rus = RandomUnderSampler()
+
+x_train_rus, y_train_rus = rus.fit_resample(x_train, y_train)
+x_test_rus, y_test_rus = rus.fit_resample(x_test, y_test)
+
+
+# Befor sampling class distribution
+print('Before sampling class distribution:-',Counter(y_train))
+# new class distribution 
+print('New class distribution:-',Counter(y_train_rus))
+
+#Model Building
+
+from sklearn.ensemble import RandomForestClassifier
+
+
+# random forest model creation
+rfc = RandomForestClassifier()
+rfc.fit(x_train_rus,y_train_rus)
+# predictions
+y_pred = rfc.predict(x_test_rus)
+
+
+param_grid = {
+    #'max_depth': range(5,10,5),
+    'min_samples_leaf': range(50, 150, 50),
+    'min_samples_split': range(50, 150, 50),
+    'n_estimators': [100,200,300], 
+    'max_features': [10, 20]
+}
+
+
+
+from sklearn.model_selection import GridSearchCV
+
+
+grid_search = GridSearchCV(
+    estimator = rfc,
+    param_grid = param_grid,
+    cv = 2,
+    verbose = 1,
+    return_train_score = True)
+
+
+
+#Evaluating the classifier
+#printing every score of the classifier
+#scoring in any thing
+from sklearn.metrics import classification_report, accuracy_score,precision_score,recall_score,f1_score,matthews_corrcoef
+from sklearn.metrics import confusion_matrix
+
+
+
+tn, fp, fn, tp = confusion_matrix(y_test_rus, pred_test_lr).ravel()
+conf_matrix = pd.DataFrame(
+    {
+        'Predicted Fraud': [tp, fp],
+        'Predicted Not Fraud': [fn, tn]
+    }, index = ['Fraud', 'Not Fraud']
+)
+conf_matrix
+
+
+n_errors = (y_pred != y_test_rus).sum()
+print("The model used is Random Forest classifier")
+acc= accuracy_score(y_test_rus,y_pred)
+print("The accuracy is  {}".format(acc))
+prec= precision_score(y_test_rus,y_pred)
+print("The precision is {}".format(prec))
+rec= recall_score(y_test_rus,y_pred)
+print("The recall is {}".format(rec))
+f1= f1_score(y_test_rus,y_pred)
+print("The F1-Score is {}".format(f1))
+MCC=matthews_corrcoef(y_test_rus,y_pred)
+print("The Matthews correlation coefficient is {}".format(MCC))
+
+
+#Confusion Matrix
+
+LABELS = ['not fraud', 'Fraud']
+conf_matrix = confusion_matrix(y_test_rus, y_pred)
+plt.figure(figsize=(5, 5))
+sn.heatmap(conf_matrix, xticklabels=LABELS, yticklabels=LABELS, annot=True, fmt="d");
+plt.title("Confusion matrix")
+plt.ylabel('True class')
+plt.xlabel('Predicted class')
+plt.show()
+
+# Run classification metrics
+plt.figure(figsize=(5, 5))
+print('{}: {}'.format("Random Forest", n_errors))
+print(accuracy_score(y_test_rus, y_pred))
+print(classification_report(y_test_rus, y_pred))
+
+
+#ROC
+
+rfc_test_pred_prob = rfc.predict_proba(x_test_rus)[:,1]
+
+import sklearn.metrics as metrics
+rfc_auc = metrics.roc_auc_score(y_test_rus, rfc_test_pred_prob)
+rfc_auc
+
+fpr, tpr, threshold = roc_curve(y_test_rus, rfc_test_pred_prob)
+
+
+def plot_roc_curve(fpr, tpr, label=None):
+    plt.figure(figsize=(8, 6))
+    plt.title('ROC Curve', fontsize=15)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr, tpr, linewidth=2, label=label)
+    plt.xticks(np.arange(0, 1, 0.05), rotation=90)
+    plt.xlabel('False Positive Rates', fontsize=15)
+    plt.ylabel('True Positive Rates', fontsize=15)
+    plt.legend(loc='best')
+    
+    plt.show()
+
+
+plot_roc_curve(fpr=fpr, tpr=tpr, label="AUC = %.3f" % rfc_auc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
